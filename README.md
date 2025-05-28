@@ -13,7 +13,7 @@ An intelligent scheduling application built with Flutter that uses AI to create 
 ## Tech Stack
 
 - Frontend: Flutter
-- Backend: Python with FastAPI
+- Backend: Flask
 - AI/ML: Python optimization libraries
 - Database: SQLite (for development)
 
