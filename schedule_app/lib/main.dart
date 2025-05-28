@@ -1,17 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/input_screen.dart';
 
-void main() async {
-  try {
-    print('Loading .env file...');
-    await dotenv.load();
-    print(
-        'API Key loaded: ${dotenv.env['OPENAI_API_KEY']?.substring(0, 5)}...');
-  } catch (e) {
-    print('Error during initialization: $e');
-  }
-
+void main() {
   runApp(const MyApp());
 }
 
