@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/ai_service.dart';
-import '../services/scheduler_service.dart';
 import '../services/calendar_service.dart';
+import '../services/schedule_state.dart';
+import '../models/task.dart';
 import 'schedule_screen.dart';
 
 class InputScreen extends StatefulWidget {
@@ -14,34 +15,83 @@ class InputScreen extends StatefulWidget {
 class _InputScreenState extends State<InputScreen> {
   final TextEditingController _inputController = TextEditingController();
   final AIService _aiService = AIService();
-  final SchedulerService _schedulerService = SchedulerService(
-    CalendarService(),
-  );
+  final CalendarService _calendarService = CalendarService();
+  final ScheduleState _scheduleState = ScheduleState();
   bool _isLoading = false;
 
   Future<void> _generateSchedule() async {
-    if (_inputController.text.isEmpty) return;
+    if (_inputController.text.isEmpty) {
+      print('Input is empty');
+      return;
+    }
 
+    print('Starting schedule generation...');
     setState(() {
       _isLoading = true;
     });
 
     try {
+      print('Calling AI service...');
       final tasks = await _aiService.generateSchedule(_inputController.text);
+      print('Received ${tasks.length} tasks from AI service');
+
+      // Store the generated tasks in the global state
+      _scheduleState.updateSchedule(List<Task>.from(tasks));
+      print('InputScreen - Updated schedule state with ${tasks.length} tasks');
+
+      // Request calendar permissions
+      print('Requesting calendar permissions...');
+      final hasPermission = await _calendarService.requestCalendarPermission();
+
+      if (!hasPermission) {
+        print('Calendar permission denied');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Calendar permission is required to create events'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      print('Adding tasks to calendar...');
+      // Add tasks to calendar
+      for (final task in tasks) {
+        print('Adding task: ${task.name}');
+        await _calendarService.createEvent(
+          title: task.name,
+          startTime: task.startTime,
+          endTime: task.endTime,
+        );
+      }
 
       if (mounted) {
+        print('Showing success message and navigating to schedule screen');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Events have been added to your calendar'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                ScheduleScreen(tasks: tasks, startTime: DateTime.now()),
+            builder: (context) => ScheduleScreen(
+              tasks: List<Task>.from(_scheduleState.currentTasks),
+              startTime: _scheduleState.scheduleStartTime,
+            ),
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Error in _generateSchedule: $e');
+      print('Stack trace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.black),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -51,6 +101,23 @@ class _InputScreenState extends State<InputScreen> {
         });
       }
     }
+  }
+
+  void _navigateToScheduleScreen() {
+    print('InputScreen - Navigating to schedule screen');
+    print('InputScreen - Current tasks: ${_scheduleState.currentTasks}');
+    print(
+        'InputScreen - Number of tasks: ${_scheduleState.currentTasks.length}');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ScheduleScreen(
+          tasks: List<Task>.from(_scheduleState.currentTasks),
+          startTime: _scheduleState.scheduleStartTime,
+        ),
+      ),
+    );
   }
 
   @override
@@ -65,15 +132,7 @@ class _InputScreenState extends State<InputScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: IconButton(
               icon: const Icon(Icons.home, color: Colors.black, size: 28),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        ScheduleScreen(tasks: [], startTime: DateTime.now()),
-                  ),
-                );
-              },
+              onPressed: _navigateToScheduleScreen,
             ),
           ),
         ],
@@ -130,8 +189,7 @@ class _InputScreenState extends State<InputScreen> {
                             color: Colors.black,
                           ),
                           decoration: InputDecoration(
-                            hintText:
-                                'Example:\n\n'
+                            hintText: 'Example:\n\n'
                                 'I need to:\n'
                                 '- Study for math exam (3 hours)\n'
                                 '- Complete project report (2 hours)\n'
